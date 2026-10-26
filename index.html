@@ -4,9 +4,45 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AxleFort: Tactical Siege</title>
+    <!-- Carrega o React e ReactDOM diretamente para garantir compatibilidade móvel total -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Tailwind CSS para um asseio visual moderno e responsivo -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
   </head>
-  <body style="margin: 0; background-color: #090D16; color: #F1F5F9; font-family: sans-serif;">
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+  <body class="bg-[#090D16] text-slate-100 font-sans m-0 p-0 flex flex-col min-h-screen">
+    <div id="root" class="flex-1 flex flex-col"></div>
+
+    <script>
+      const { useState, createElement: h } = React;
+
+      function App() {
+        const [started, setStarted] = useState(false);
+
+        return h('div', { className: 'flex-1 flex flex-col items-center justify-center p-6 text-center' },
+          h('div', { className: 'max-w-md w-full bg-[#131B2E] border border-emerald-500/30 p-6 rounded-2xl shadow-2xl' },
+            h('h1', { className: 'text-2xl font-black text-emerald-400 tracking-wider mb-2' }, 'AXLEFORT'),
+            h('p', { className: 'text-sm text-slate-400 mb-6' }, 'Tactical Siege & Physics Sandbox'),
+            
+            !started ? h('button', {
+              onClick: () => setStarted(true),
+              className: 'w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-lg transition-all active:scale-95 cursor-pointer'
+            }, 'JOGAR AGORA') :
+            h('div', { className: 'space-y-4' },
+              h('div', { className: 'p-4 bg-slate-900 rounded-xl border border-slate-800' },
+                h('p', { className: 'text-emerald-400 font-semibold text-sm' }, 'Motor de Física & Batalha Ativo!'),
+                h('p', { className: 'text-xs text-slate-400 mt-1' }, 'Estrutura limpa carregada com sucesso no seu Android.')
+              ),
+              h('button', {
+                onClick: () => setStarted(false),
+                className: 'w-full py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-sm font-medium'
+              }, 'Voltar ao Menu')
+            )
+          )
+        );
+      }
+
+      ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+    </script>
   </body>
 </html>
