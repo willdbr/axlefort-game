@@ -12,213 +12,215 @@
     <div id="root" class="flex-1 flex flex-col h-screen"></div>
 
     <script>
-      const { useState, useEffect, createElement: h } = React;
+      const { useState, useEffect, useRef, createElement: h } = React;
 
       function App() {
-        const [screen, setScreen] = useState('menu'); // 'menu', 'builder', 'battle'
+        const [screen, setScreen] = useState('menu'); // 'menu', 'game'
+        const [selectedTool, setSelectedTool] = useState('wood'); // 'wood', 'stone', 'cannon', 'delete'
+        const [statusText, setStatusText] = useState('Toque na grade para construir ou posicionar canhões.');
         
-        // Estado do Construtor de Castelo
-        const [blocks, setBlocks] = useState([
-          { id: 1, type: 'stone', x: 2, y: 3, hp: 200, maxHp: 200 },
-          { id: 2, type: 'wood', x: 1, y: 2, hp: 100, maxHp: 100 },
-          { id: 3, type: 'wood', x: 3, y: 2, hp: 100, maxHp: 100 },
+        // Elementos do mundo do jogo
+        const [entities, setEntities] = useState([
+          { id: 1, type: 'stone', x: 250, y: 320, w: 40, h: 40, hp: 200 },
+          { id: 2, type: 'wood', x: 210, y: 320, w: 40, h: 40, hp: 100 },
+          { id: 3, type: 'wood', x: 290, y: 320, w: 40, h: 40, hp: 100 },
+          { id: 4, type: 'cannon', x: 60, y: 320, w: 50, h: 40, hp: 150 },
+          { id: 5, type: 'enemy', x: 550, y: 320, w: 45, h: 60, hp: 250 }
         ]);
-        const [selectedType, setSelectedType] = useState('wood');
-        const [log, setLog] = useState('Castelo pronto para testes de estabilidade.');
 
-        // Estado da Arena de Batalha
-        const [enemyHp, setEnemyHp] = useState(300);
-        const [angle, setAngle] = useState(45);
-        const [power, setPower] = useState(70);
-        const [battleLog, setBattleLog] = useState('Aponte o canhão e dispare contra a fortificação inimiga!');
+        const [projectiles, setProjectiles] = useState([]);
+        const [particles, setParticles] = useState([]);
+        const canvasRef = useRef(null);
 
-        // Adicionar bloco no grid do construtor
-        const handleAddBlock = (x, y) => {
-          if (blocks.some(b => b.x === x && b.y === y)) {
-            setBlocks(blocks.filter(b => !(b.x === x && b.y === y)));
-            setLog(`Bloco removido da posição (${x}, ${y}).`);
-            return;
-          }
-          const newBlock = {
-            id: Date.now(),
-            type: selectedType,
-            x,
-            y,
-            hp: selectedType === 'stone' ? 200 : selectedType === 'diamond' ? 400 : 100,
-            maxHp: selectedType === 'stone' ? 200 : selectedType === 'diamond' ? 400 : 100,
+        // Loop de Renderização Gráfica (Canvas 2D)
+        useEffect(() => {
+          if (screen !== 'game') return;
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+          const ctx = canvas.getContext('2d');
+          let animationFrameId;
+
+          // Ajustar tamanho real do canvas para mobile
+          canvas.width = canvas.parentElement.clientWidth;
+          canvas.height = canvas.parentElement.clientHeight;
+
+          const render = () => {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. Desenhar Fundo (Céu e Solo Estilizado)
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#0f172a');
+            gradient.addColorStop(1, '#1e1b4b');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Linha do Chão
+            ctx.fillStyle = '#065f46';
+            ctx.fillRect(0, canvas.height - 80, canvas.width, 80);
+            ctx.fillStyle = '#10b981';
+            ctx.fillRect(0, canvas.height - 80, canvas.width, 6);
+
+            // 2. Desenhar Entidades (Blocos, Canhões, Inimigos)
+            entities.forEach(ent => {
+              ctx.save();
+              if (ent.type === 'wood') {
+                ctx.fillStyle = '#92400e';
+                ctx.strokeStyle = '#b45309';
+                ctx.fillRect(ent.x, canvas.height - 80 - ent.y, ent.w, ent.h);
+                ctx.strokeRect(ent.x, canvas.height - 80 - ent.y, ent.w, ent.h);
+                // Detalhe de textura da madeira
+                ctx.fillStyle = '#78350f';
+                ctx.fillRect(ent.x + 8, canvas.height - 80 - ent.y + 8, ent.w - 16, 4);
+              } else if (ent.type === 'stone') {
+                ctx.fillStyle = '#475569';
+                ctx.strokeStyle = '#64748b';
+                ctx.fillRect(ent.x, canvas.height - 80 - ent.y, ent.w, ent.h);
+                ctx.strokeRect(ent.x, canvas.height - 80 - ent.y, ent.w, ent.h);
+                // Detalhe de pedra
+                ctx.fillStyle = '#334155';
+                ctx.fillRect(ent.x + 6, canvas.height - 80 - ent.y + 6, 12, 12);
+              } else if (ent.type === 'cannon') {
+                ctx.fillStyle = '#3b82f6';
+                ctx.fillRect(ent.x, canvas.height - 80 - ent.y + 10, 40, 30);
+                // Cano do canhão
+                ctx.fillStyle = '#1e3a8a';
+                ctx.fillRect(ent.x + 25, canvas.height - 80 - ent.y + 5, 25, 14);
+              } else if (ent.type === 'enemy') {
+                ctx.fillStyle = '#ef4444';
+                ctx.beginPath();
+                ctx.arc(ent.x + ent.w/2, canvas.height - 80 - ent.y + ent.h/2, ent.w/2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#b91c1c';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+              }
+              ctx.restore();
+            });
+
+            // 3. Desenhar Projéteis em movimento
+            setProjectiles(prev => prev.map(p => {
+              const nx = p.x + p.vx;
+              const ny = p.y + p.vy;
+              const nvy = p.vy - 0.4; // gravidade
+              
+              ctx.fillStyle = '#f59e0b';
+              ctx.beginPath();
+              ctx.arc(nx, canvas.height - 80 - ny, 6, 0, Math.PI * 2);
+              ctx.fill();
+
+              return { ...p, x: nx, y: ny, vy: nvy };
+            }).filter(p => p.y > 0 && p.x < canvas.width));
+
+            // 4. Desenhar Partículas de explosão/destruição
+            setParticles(prev => prev.map(pt => {
+              ctx.fillStyle = pt.color;
+              ctx.fillRect(pt.x, canvas.height - 80 - pt.y, pt.size, pt.size);
+              return { ...pt, x: pt.x + pt.vx, y: pt.y + pt.vy, size: Math.max(0, pt.size - 0.2) };
+            }).filter(pt => pt.size > 0));
+
+            animationFrameId = requestAnimationFrame(render);
           };
-          setBlocks([...blocks, newBlock]);
-          setLog(`Adicionado ${selectedType} em (${x}, ${y}).`);
-        };
 
-        // Simulação de Física BFS (Verifica se há suporte na base y=3)
-        const runPhysicsCheck = () => {
-          const grounded = blocks.filter(b => b.y === 3);
-          if (grounded.length === 0 && blocks.length > 0) {
-            setBlocks([]);
-            setLog('⚠️ COLAPSO TOTAL! A base foi destruída e toda a estrutura desabou!');
-          } else {
-            setLog('✅ Simulação BFS: Estrutura perfeitamente ancorada e estável!');
-          }
-        };
+          animationFrameId = requestAnimationFrame(render);
+          return () => cancelAnimationFrame(animationFrameId);
+        }, [screen, entities, projectiles, particles]);
 
-        // Disparo na Arena de Batalha
-        const fireCannon = () => {
-          const hitChance = Math.abs(angle - 45) < 15 && Math.abs(power - 75) < 20;
-          if (hitChance) {
-            const damage = Math.floor(Math.random() * 80) + 70;
-            const nextHp = Math.max(0, enemyHp - damage);
-            setEnemyHp(nextHp);
-            setBattleLog(`🎯 IMPACTO DIRETO! Causou ${damage} de dano na fortificação inimiga!`);
-          } else {
-            setBattleLog(`💨 Tiro desviado! O projétil passou longe do alvo. Ajuste o ângulo e força.`);
+        // Interação de Toque no Canvas (Construir ou Disparar)
+        const handleCanvasClick = (e) => {
+          const canvas = canvasRef.current;
+          const rect = canvas.getBoundingClientRect();
+          const clickX = e.clientX - rect.left;
+          const clickY = canvas.height - 80 - (e.clientY - rect.top); // inverter eixo Y para o chão
+
+          if (selectedTool === 'wood' || selectedTool === 'stone') {
+            // Alinhar à grade visual
+            const gx = Math.floor(clickX / 40) * 40;
+            const gy = Math.floor(clickY / 40) * 40;
+            const newEntity = { id: Date.now(), type: selectedTool, x: gx, y: gy, w: 40, h: 40, hp: selectedTool === 'stone' ? 200 : 100 };
+            setEntities([...entities, newEntity]);
+            setStatusText(`Bloco de ${selectedTool} posicionado visualmente!`);
+          } else if (selectedTool === 'cannon') {
+            // Disparar projétil a partir do canhão
+            const newProj = { id: Date.now(), x: 90, y: 340, vx: 9, vy: 7 };
+            setProjectiles(prev => [...prev, newProj]);
+            setStatusText('🔥 Canhão disparado! Acompanhe o projétil no ar.');
+
+            // Simular impacto e destruição visual após 1.2 segundos
+            setTimeout(() => {
+              // Gerar partículas de explosão
+              const newParts = Array.from({ length: 15 }).map(() => ({
+                x: 560 + (Math.random() * 30 - 15),
+                y: 340 + (Math.random() * 30 - 15),
+                vx: Math.random() * 6 - 3,
+                vy: Math.random() * 6 - 3,
+                size: Math.random() * 6 + 4,
+                color: Math.random() > 0.5 ? '#f59e0b' : '#ef4444'
+              }));
+              setParticles(prev => [...prev, ...newParts]);
+              setStatusText('💥 IMPACTO NA FORTIFICAÇÃO! Blocos e inimigos atingidos!');
+              
+              // Danificar inimigo / remover entidade
+              setEntities(prev => prev.map(ent => ent.type === 'enemy' ? { ...ent, hp: Math.max(0, ent.hp - 100) } : ent));
+            }, 1200);
           }
         };
 
         if (screen === 'menu') {
-          return h('div', { className: 'flex-1 flex flex-col items-center justify-center p-6 text-center bg-gradient-to-b from-[#090D16] to-[#131B2E]' },
+          return h('div', { className: 'flex-1 flex flex-col items-center justify-center p-6 text-center bg-gradient-to-b from-[#090D16] to-[#1e1b4b]' },
             h('div', { className: 'max-w-md w-full bg-[#131B2E]/90 border border-emerald-500/30 p-8 rounded-3xl shadow-2xl space-y-6 backdrop-blur-md' },
               h('div', { className: 'space-y-2' },
                 h('h1', { className: 'text-4xl font-black text-emerald-400 tracking-wider' }, 'AXLEFORT'),
-                h('p', { className: 'text-xs text-slate-400 uppercase tracking-widest' }, 'Tactical Siege & Physics Sandbox')
+                h('p', { className: 'text-xs text-slate-400 uppercase tracking-widest' }, 'Tactical Siege & Graphics Engine')
               ),
-              h('div', { className: 'space-y-3 pt-2' },
-                h('button', {
-                  onClick: () => setScreen('builder'),
-                  className: 'w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-2xl shadow-lg transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2'
-                }, '🏗️ CONSTRUTOR DE CASTELO'),
-                h('button', {
-                  onClick: () => setScreen('battle'),
-                  className: 'w-full py-4 bg-sky-600 hover:bg-sky-500 text-white font-bold rounded-2xl shadow-lg transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2'
-                }, '⚔️ ARENA DE BATALHA 1V1')
-              )
+              h('button', {
+                onClick: () => setScreen('game'),
+                className: 'w-full py-5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-2xl shadow-xl transition-all active:scale-95 cursor-pointer text-lg flex items-center justify-center gap-2'
+              }, '🎮 JOGAR COM GRÁFICOS')
             )
           );
         }
 
-        if (screen === 'builder') {
-          return h('div', { className: 'flex-1 flex flex-col p-4 max-w-md mx-auto w-full justify-between h-full' },
-            h('div', { className: 'space-y-3' },
-              h('div', { className: 'flex justify-between items-center bg-[#131B2E] p-3 rounded-2xl border border-slate-800' },
-                h('div', null,
-                  h('h2', { className: 'font-bold text-emerald-400 text-sm' }, 'Editor de Castelo'),
-                  h('p', { className: 'text-[10px] text-slate-400' }, 'Toque nas células para construir/remover')
-                ),
-                h('button', { onClick: () => setScreen('menu'), className: 'text-xs bg-slate-800 px-3 py-2 rounded-xl text-slate-300 font-medium' }, 'Menu')
-              ),
-
-              // Seletor de Material
-              h('div', { className: 'grid grid-cols-3 gap-2' },
-                ['wood', 'stone', 'diamond'].map(type => 
-                  h('button', {
-                    key: type,
-                    onClick: () => setSelectedType(type),
-                    className: `py-2.5 rounded-xl text-xs font-bold capitalize transition-all border ${selectedType === type ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg' : 'bg-slate-900 border-slate-800 text-slate-400'}`
-                  }, type === 'wood' ? '🪵 Madeira' : type === 'stone' ? '🧱 Pedra' : '💎 Diamante')
-                )
-              ),
-
-              // Grid de Construção 4x4
-              h('div', { className: 'bg-slate-900/80 p-4 rounded-2xl border border-slate-800 grid grid-cols-4 gap-2.5 aspect-square' },
-                Array.from({ length: 16 }).map((_, idx) => {
-                  const x = idx % 4;
-                  const y = Math.floor(idx / 4);
-                  const block = blocks.find(b => b.x === x && b.y === y);
-                  return h('button', {
-                    key: idx,
-                    onClick: () => handleAddBlock(x, y),
-                    className: `rounded-xl border transition-all flex flex-col items-center justify-center text-[10px] font-bold ${
-                      block 
-                        ? block.type === 'wood' ? 'bg-amber-800/80 border-amber-600 text-amber-200' 
-                          : block.type === 'stone' ? 'bg-slate-700 border-slate-500 text-slate-200' 
-                          : 'bg-cyan-700 border-cyan-400 text-cyan-100'
-                        : 'bg-slate-950/50 border-slate-800/60 hover:bg-slate-800/50 text-slate-600'
-                    }`
-                  }, block ? block.type[0].toUpperCase() : `${x},${y}`);
-                })
-              ),
-
-              h('div', { className: 'p-3 bg-slate-900 rounded-xl border border-slate-800 text-center' },
-                h('p', { className: 'text-xs font-medium text-emerald-300' }, log)
-              )
+        return h('div', { className: 'flex-1 flex flex-col h-full justify-between bg-slate-950' },
+          // Barra Superior
+          h('div', { className: 'flex justify-between items-center bg-[#131B2E] p-3 border-b border-slate-800 z-10' },
+            h('div', { className: 'flex items-center gap-2' },
+              h('span', { className: 'font-bold text-emerald-400 text-sm' }, 'AxleFort Arena'),
+              h('span', { className: 'text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-300' }, `Inimigo HP: ${entities.find(e => e.type === 'enemy')?.hp || 0}`)
             ),
+            h('button', { onClick: () => setScreen('menu'), className: 'text-xs bg-slate-800 px-3 py-1.5 rounded-lg text-slate-300' }, 'Sair')
+          ),
 
-            h('div', { className: 'space-y-2 pb-2' },
-              h('button', {
-                onClick: runPhysicsCheck,
-                className: 'w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-2xl shadow-lg text-sm'
-              }, 'Testar Estabilidade Física (BFS)'),
-              h('button', {
-                onClick: () => setBlocks([]),
-                className: 'w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-400 font-medium rounded-xl text-xs'
-              }, 'Limpar Grade')
+          // Tela Gráfica (Canvas)
+          h('div', { className: 'flex-1 relative w-full overflow-hidden' },
+            h('canvas', {
+              ref: canvasRef,
+              onClick: handleCanvasClick,
+              className: 'w-full h-full cursor-crosshair touch-none'
+            }),
+            h('div', { className: 'absolute top-3 left-3 bg-slate-900/80 backdrop-blur border border-slate-800 px-3 py-1.5 rounded-xl pointer-events-none' },
+              h('p', { className: 'text-[11px] text-emerald-400 font-medium' }, statusText)
             )
-          );
-        }
+          ),
 
-        if (screen === 'battle') {
-          return h('div', { className: 'flex-1 flex flex-col p-4 max-w-md mx-auto w-full justify-between h-full' },
-            h('div', { className: 'space-y-4' },
-              h('div', { className: 'flex justify-between items-center bg-[#131B2E] p-3 rounded-2xl border border-slate-800' },
-                h('div', null,
-                  h('h2', { className: 'font-bold text-sky-400 text-sm' }, 'Arena de Batalha 1v1'),
-                  h('p', { className: 'text-[10px] text-slate-400' }, 'Destrua a fortificação inimiga')
-                ),
-                h('button', { onClick: () => setScreen('menu'), className: 'text-xs bg-slate-800 px-3 py-2 rounded-xl text-slate-300 font-medium' }, 'Menu')
-              ),
-
-              // Status do Alvo Inimigo
-              h('div', { className: 'p-4 bg-slate-900 rounded-2xl border border-slate-800 space-y-2 text-center' },
-                h('div', { className: 'flex justify-between text-xs font-bold text-slate-300 px-2' },
-                  h('span', null, 'Fortificação Inimiga'),
-                  h('span', { className: 'text-red-400' }, `${enemyHp} / 300 HP`)
-                ),
-                h('div', { className: 'w-full bg-slate-950 h-3 rounded-full overflow-hidden border border-slate-800' },
-                  h('div', { className: 'bg-red-500 h-full transition-all duration-300', style: { width: `${(enemyHp / 300) * 100}%` } })
-                ),
-                enemyHp === 0 && h('p', { className: 'text-xs font-bold text-emerald-400 pt-1' }, '🏆 VITÓRIA! O castelo inimigo desabou!')
-              ),
-
-              // Controles de Artilharia
-              h('div', { className: 'bg-slate-900 p-4 rounded-2xl border border-slate-800 space-y-4' },
-                h('div', { className: 'space-y-1' },
-                  h('div', { className: 'flex justify-between text-xs text-slate-300' },
-                    h('span', null, 'Ângulo de Disparo:'),
-                    h('span', { className: 'font-mono text-sky-400' }, `${angle}°`)
-                  ),
-                  h('input', {
-                    type: 'range', min: '10', max: '80', value: angle,
-                    onChange: (e) => setAngle(Number(e.target.value)),
-                    className: 'w-full accent-sky-500 cursor-pointer'
-                  })
-                ),
-                h('div', { className: 'space-y-1' },
-                  h('div', { className: 'flex justify-between text-xs text-slate-300' },
-                    h('span', null, 'Força do Propulsor:'),
-                    h('span', { className: 'font-mono text-sky-400' }, `${power}%`)
-                  ),
-                  h('input', {
-                    type: 'range', min: '20', max: '100', value: power,
-                    onChange: (e) => setPower(Number(e.target.value)),
-                    className: 'w-full accent-sky-500 cursor-pointer'
-                  })
-                )
-              ),
-
-              h('div', { className: 'p-3 bg-sky-950/40 rounded-xl border border-sky-500/20 text-center' },
-                h('p', { className: 'text-xs font-medium text-sky-300' }, battleLog)
-              )
-            ),
-
-            h('div', { className: 'pb-2' },
+          // Barra de Ferramentas Inferior (Ferramentas Visuais)
+          h('div', { className: 'bg-[#131B2E] p-3 border-t border-slate-800 flex justify-around gap-2 z-10' },
+            [
+              { id: 'wood', label: '🪵 Madeira' },
+              { id: 'stone', label: '🧱 Pedra' },
+              { id: 'cannon', label: '🔥 Disparar' }
+            ].map(tool =>
               h('button', {
-                onClick: fireCannon,
-                disabled: enemyHp === 0,
-                className: `w-full py-4 font-bold rounded-2xl shadow-lg text-sm transition-all ${enemyHp === 0 ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-sky-600 hover:bg-sky-500 text-white active:scale-95'}`
-              }, enemyHp === 0 ? 'Batalha Concluída' : '🔥 DISPARAR ARTILHARIA')
+                key: tool.id,
+                onClick: () => setSelectedTool(tool.id),
+                className: `flex-1 py-3 rounded-xl text-xs font-bold transition-all border ${
+                  selectedTool === tool.id 
+                    ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg scale-105' 
+                    : 'bg-slate-900 border-slate-800 text-slate-400'
+                }`
+              }, tool.label)
             )
-          );
-        }
+          )
+        );
       }
 
       ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
