@@ -1,0 +1,6 @@
+{
+  "appId": "com.axlefort.game",
+  "appName": "AxleFort",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}
