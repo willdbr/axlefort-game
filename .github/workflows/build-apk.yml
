@@ -3,6 +3,7 @@ name: Build Android APK
 on:
   push:
     branches: [ main, master ]
+  workflow_dispatch: # Permite disparar manualmente na aba Actions
 
 jobs:
   build:
@@ -33,8 +34,9 @@ jobs:
       - name: Init Capacitor Android
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/android
+          npx cap init AxleFort com.axlefort.game --web-dir dist --yes
           npx cap add android
-          npx cap sync
+          npx cap sync android
 
       - name: Build APK with Gradle
         run: |
