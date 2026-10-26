@@ -16,23 +16,23 @@
 
       function App() {
         const [screen, setScreen] = useState('menu'); // 'menu', 'game'
-        const [selectedTool, setSelectedTool] = useState('wood'); // 'wood', 'stone', 'cannon', 'delete'
-        const [statusText, setStatusText] = useState('Toque na grade para construir ou posicionar canhões.');
+        const [selectedTool, setSelectedTool] = useState('wood'); // 'wood', 'stone', 'cannon'
+        const [statusText, setStatusText] = useState('Toque no topo para soltar blocos na gravidade ou disparar canhões.');
         
-        // Elementos do mundo do jogo
+        // Elementos do mundo com física de queda (vy e y dinâmicos)
         const [entities, setEntities] = useState([
-          { id: 1, type: 'stone', x: 250, y: 320, w: 40, h: 40, hp: 200 },
-          { id: 2, type: 'wood', x: 210, y: 320, w: 40, h: 40, hp: 100 },
-          { id: 3, type: 'wood', x: 290, y: 320, w: 40, h: 40, hp: 100 },
-          { id: 4, type: 'cannon', x: 60, y: 320, w: 50, h: 40, hp: 150 },
-          { id: 5, type: 'enemy', x: 550, y: 320, w: 45, h: 60, hp: 250 }
+          { id: 1, type: 'stone', x: 260, y: 150, vy: 0, w: 40, h: 40, hp: 200, grounded: false },
+          { id: 2, type: 'wood', x: 220, y: 220, vy: 0, w: 40, h: 40, hp: 100, grounded: false },
+          { id: 3, type: 'wood', x: 300, y: 220, vy: 0, w: 40, h: 40, hp: 100, grounded: false },
+          { id: 4, type: 'cannon', x: 60, y: 0, vy: 0, w: 50, h: 40, hp: 150, grounded: true },
+          { id: 5, type: 'enemy', x: 550, y: 0, vy: 0, w: 45, h: 60, hp: 250, grounded: true }
         ]);
 
         const [projectiles, setProjectiles] = useState([]);
         const [particles, setParticles] = useState([]);
         const canvasRef = useRef(null);
 
-        // Loop de Renderização Gráfica (Canvas 2D)
+        // Loop de Física e Renderização Gráfica em Tempo Real
         useEffect(() => {
           if (screen !== 'game') return;
           const canvas = canvasRef.current;
@@ -40,81 +40,109 @@
           const ctx = canvas.getContext('2d');
           let animationFrameId;
 
-          // Ajustar tamanho real do canvas para mobile
           canvas.width = canvas.parentElement.clientWidth;
           canvas.height = canvas.parentElement.clientHeight;
+          const groundLevel = 80; // altura do chão a partir da base
 
           const render = () => {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // 1. Desenhar Fundo (Céu e Solo Estilizado)
+            // 1. Fundo (Céu e Chão)
             const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-            gradient.addColorStop(0, '#0f172a');
+            gradient.addColorStop(0, '#090d16');
             gradient.addColorStop(1, '#1e1b4b');
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Linha do Chão
+            // Chão
             ctx.fillStyle = '#065f46';
-            ctx.fillRect(0, canvas.height - 80, canvas.width, 80);
+            ctx.fillRect(0, canvas.height - groundLevel, canvas.width, groundLevel);
             ctx.fillStyle = '#10b981';
-            ctx.fillRect(0, canvas.height - 80, canvas.width, 6);
+            ctx.fillRect(0, canvas.height - groundLevel, canvas.width, 6);
 
-            // 2. Desenhar Entidades (Blocos, Canhões, Inimigos)
-            entities.forEach(ent => {
-              ctx.save();
-              if (ent.type === 'wood') {
-                ctx.fillStyle = '#92400e';
-                ctx.strokeStyle = '#b45309';
-                ctx.fillRect(ent.x, canvas.height - 80 - ent.y, ent.w, ent.h);
-                ctx.strokeRect(ent.x, canvas.height - 80 - ent.y, ent.w, ent.h);
-                // Detalhe de textura da madeira
-                ctx.fillStyle = '#78350f';
-                ctx.fillRect(ent.x + 8, canvas.height - 80 - ent.y + 8, ent.w - 16, 4);
-              } else if (ent.type === 'stone') {
-                ctx.fillStyle = '#475569';
-                ctx.strokeStyle = '#64748b';
-                ctx.fillRect(ent.x, canvas.height - 80 - ent.y, ent.w, ent.h);
-                ctx.strokeRect(ent.x, canvas.height - 80 - ent.y, ent.w, ent.h);
-                // Detalhe de pedra
-                ctx.fillStyle = '#334155';
-                ctx.fillRect(ent.x + 6, canvas.height - 80 - ent.y + 6, 12, 12);
-              } else if (ent.type === 'cannon') {
-                ctx.fillStyle = '#3b82f6';
-                ctx.fillRect(ent.x, canvas.height - 80 - ent.y + 10, 40, 30);
-                // Cano do canhão
-                ctx.fillStyle = '#1e3a8a';
-                ctx.fillRect(ent.x + 25, canvas.height - 80 - ent.y + 5, 25, 14);
-              } else if (ent.type === 'enemy') {
-                ctx.fillStyle = '#ef4444';
-                ctx.beginPath();
-                ctx.arc(ent.x + ent.w/2, canvas.height - 80 - ent.y + ent.h/2, ent.w/2, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.strokeStyle = '#b91c1c';
-                ctx.lineWidth = 3;
-                ctx.stroke();
-              }
-              ctx.restore();
+            // 2. Atualizar e Desenhar Entidades com Física de Queda e Colisão
+            setEntities(prevEntities => {
+              return prevEntities.map(ent => {
+                let ny = ent.y;
+                let nvy = ent.vy;
+                let grounded = ent.grounded;
+
+                if (!grounded) {
+                  nvy -= 0.6; // Gravidade puxando para baixo
+                  ny += nvy;
+
+                  // Colisão com o chão
+                  const floorY = 0;
+                  if (ny <= floorY) {
+                    ny = floorY;
+                    nvy = 0;
+                    grounded = true;
+                  }
+
+                  // Colisão simples empilhada com outros blocos no solo
+                  prevEntities.forEach(other => {
+                    if (other.id !== ent.id && other.grounded) {
+                      if (Math.abs(ent.x - other.x) < 35 && ny <= other.y + other.h && ny > other.y) {
+                        ny = other.y + other.h;
+                        nvy = 0;
+                        grounded = true;
+                      }
+                    }
+                  });
+                }
+
+                // Desenhar entidade no Canvas
+                ctx.save();
+                const renderY = canvas.height - groundLevel - ny - ent.h;
+
+                if (ent.type === 'wood') {
+                  ctx.fillStyle = '#92400e';
+                  ctx.strokeStyle = '#b45309';
+                  ctx.fillRect(ent.x, renderY, ent.w, ent.h);
+                  ctx.strokeRect(ent.x, renderY, ent.w, ent.h);
+                } else if (ent.type === 'stone') {
+                  ctx.fillStyle = '#475569';
+                  ctx.strokeStyle = '#64748b';
+                  ctx.fillRect(ent.x, renderY, ent.w, ent.h);
+                  ctx.strokeRect(ent.x, renderY, ent.w, ent.h);
+                } else if (ent.type === 'cannon') {
+                  ctx.fillStyle = '#3b82f6';
+                  ctx.fillRect(ent.x, renderY + 10, 40, 30);
+                  ctx.fillStyle = '#1e3a8a';
+                  ctx.fillRect(ent.x + 25, renderY + 5, 25, 14);
+                } else if (ent.type === 'enemy') {
+                  ctx.fillStyle = '#ef4444';
+                  ctx.beginPath();
+                  ctx.arc(ent.x + ent.w/2, renderY + ent.h/2, ent.w/2, 0, Math.PI * 2);
+                  ctx.fill();
+                  ctx.strokeStyle = '#b91c1c';
+                  ctx.lineWidth = 3;
+                  ctx.stroke();
+                }
+                ctx.restore();
+
+                return { ...ent, y: ny, vy: nvy, grounded };
+              });
             });
 
-            // 3. Desenhar Projéteis em movimento
+            // 3. Desenhar Projéteis
             setProjectiles(prev => prev.map(p => {
               const nx = p.x + p.vx;
               const ny = p.y + p.vy;
-              const nvy = p.vy - 0.4; // gravidade
+              const nvy = p.vy - 0.4;
               
               ctx.fillStyle = '#f59e0b';
               ctx.beginPath();
-              ctx.arc(nx, canvas.height - 80 - ny, 6, 0, Math.PI * 2);
+              ctx.arc(nx, canvas.height - groundLevel - ny, 6, 0, Math.PI * 2);
               ctx.fill();
 
               return { ...p, x: nx, y: ny, vy: nvy };
             }).filter(p => p.y > 0 && p.x < canvas.width));
 
-            // 4. Desenhar Partículas de explosão/destruição
+            // 4. Desenhar Partículas
             setParticles(prev => prev.map(pt => {
               ctx.fillStyle = pt.color;
-              ctx.fillRect(pt.x, canvas.height - 80 - pt.y, pt.size, pt.size);
+              ctx.fillRect(pt.x, canvas.height - groundLevel - pt.y, pt.size, pt.size);
               return { ...pt, x: pt.x + pt.vx, y: pt.y + pt.vy, size: Math.max(0, pt.size - 0.2) };
             }).filter(pt => pt.size > 0));
 
@@ -123,90 +151,83 @@
 
           animationFrameId = requestAnimationFrame(render);
           return () => cancelAnimationFrame(animationFrameId);
-        }, [screen, entities, projectiles, particles]);
+        }, [screen]);
 
-        // Interação de Toque no Canvas (Construir ou Disparar)
+        // Ações ao tocar na tela
         const handleCanvasClick = (e) => {
           const canvas = canvasRef.current;
           const rect = canvas.getBoundingClientRect();
           const clickX = e.clientX - rect.left;
-          const clickY = canvas.height - 80 - (e.clientY - rect.top); // inverter eixo Y para o chão
 
           if (selectedTool === 'wood' || selectedTool === 'stone') {
-            // Alinhar à grade visual
-            const gx = Math.floor(clickX / 40) * 40;
-            const gy = Math.floor(clickY / 40) * 40;
-            const newEntity = { id: Date.now(), type: selectedTool, x: gx, y: gy, w: 40, h: 40, hp: selectedTool === 'stone' ? 200 : 100 };
-            setEntities([...entities, newEntity]);
-            setStatusText(`Bloco de ${selectedTool} posicionado visualmente!`);
+            // Solta o bloco no ar para cair com gravidade (estilo jogo original)
+            const newEntity = {
+              id: Date.now(),
+              type: selectedTool,
+              x: Math.max(20, clickX - 20),
+              y: 300, // solto do alto
+              vy: 0,
+              w: 40,
+              h: 40,
+              hp: selectedTool === 'stone' ? 200 : 100,
+              grounded: false
+            };
+            setEntities(prev => [...prev, newEntity]);
+            setStatusText(`Bloco de ${selectedTool} lançado do céu! Caiu na gravidade.`);
           } else if (selectedTool === 'cannon') {
-            // Disparar projétil a partir do canhão
-            const newProj = { id: Date.now(), x: 90, y: 340, vx: 9, vy: 7 };
+            const newProj = { id: Date.now(), x: 90, y: 30, vx: 10, vy: 6 };
             setProjectiles(prev => [...prev, newProj]);
-            setStatusText('🔥 Canhão disparado! Acompanhe o projétil no ar.');
+            setStatusText('🔥 Artilharia disparada em arco parabólico!');
 
-            // Simular impacto e destruição visual após 1.2 segundos
             setTimeout(() => {
-              // Gerar partículas de explosão
               const newParts = Array.from({ length: 15 }).map(() => ({
                 x: 560 + (Math.random() * 30 - 15),
-                y: 340 + (Math.random() * 30 - 15),
+                y: 30 + (Math.random() * 30 - 15),
                 vx: Math.random() * 6 - 3,
                 vy: Math.random() * 6 - 3,
                 size: Math.random() * 6 + 4,
-                color: Math.random() > 0.5 ? '#f59e0b' : '#ef4444'
+                color: '#f59e0b'
               }));
               setParticles(prev => [...prev, ...newParts]);
-              setStatusText('💥 IMPACTO NA FORTIFICAÇÃO! Blocos e inimigos atingidos!');
-              
-              // Danificar inimigo / remover entidade
               setEntities(prev => prev.map(ent => ent.type === 'enemy' ? { ...ent, hp: Math.max(0, ent.hp - 100) } : ent));
-            }, 1200);
+            }, 1000);
           }
         };
 
         if (screen === 'menu') {
           return h('div', { className: 'flex-1 flex flex-col items-center justify-center p-6 text-center bg-gradient-to-b from-[#090D16] to-[#1e1b4b]' },
             h('div', { className: 'max-w-md w-full bg-[#131B2E]/90 border border-emerald-500/30 p-8 rounded-3xl shadow-2xl space-y-6 backdrop-blur-md' },
-              h('div', { className: 'space-y-2' },
-                h('h1', { className: 'text-4xl font-black text-emerald-400 tracking-wider' }, 'AXLEFORT'),
-                h('p', { className: 'text-xs text-slate-400 uppercase tracking-widest' }, 'Tactical Siege & Graphics Engine')
-              ),
+              h('h1', { className: 'text-4xl font-black text-emerald-400 tracking-wider' }, 'AXLEFORT'),
+              h('p', { className: 'text-xs text-slate-400 uppercase tracking-widest' }, 'Physics Siege Engine'),
               h('button', {
                 onClick: () => setScreen('game'),
-                className: 'w-full py-5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-2xl shadow-xl transition-all active:scale-95 cursor-pointer text-lg flex items-center justify-center gap-2'
-              }, '🎮 JOGAR COM GRÁFICOS')
+                className: 'w-full py-5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-2xl shadow-xl transition-all active:scale-95 cursor-pointer text-lg'
+              }, '🎮 JOGAR COM FÍSICA REAL')
             )
           );
         }
 
         return h('div', { className: 'flex-1 flex flex-col h-full justify-between bg-slate-950' },
-          // Barra Superior
           h('div', { className: 'flex justify-between items-center bg-[#131B2E] p-3 border-b border-slate-800 z-10' },
-            h('div', { className: 'flex items-center gap-2' },
-              h('span', { className: 'font-bold text-emerald-400 text-sm' }, 'AxleFort Arena'),
-              h('span', { className: 'text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-300' }, `Inimigo HP: ${entities.find(e => e.type === 'enemy')?.hp || 0}`)
-            ),
+            h('span', { className: 'font-bold text-emerald-400 text-sm' }, 'AxleFort: Física Ativa'),
             h('button', { onClick: () => setScreen('menu'), className: 'text-xs bg-slate-800 px-3 py-1.5 rounded-lg text-slate-300' }, 'Sair')
           ),
 
-          // Tela Gráfica (Canvas)
           h('div', { className: 'flex-1 relative w-full overflow-hidden' },
             h('canvas', {
               ref: canvasRef,
               onClick: handleCanvasClick,
-              className: 'w-full h-full cursor-crosshair touch-none'
+              className: 'w-full h-full cursor-pointer touch-none'
             }),
             h('div', { className: 'absolute top-3 left-3 bg-slate-900/80 backdrop-blur border border-slate-800 px-3 py-1.5 rounded-xl pointer-events-none' },
               h('p', { className: 'text-[11px] text-emerald-400 font-medium' }, statusText)
             )
           ),
 
-          // Barra de Ferramentas Inferior (Ferramentas Visuais)
           h('div', { className: 'bg-[#131B2E] p-3 border-t border-slate-800 flex justify-around gap-2 z-10' },
             [
-              { id: 'wood', label: '🪵 Madeira' },
-              { id: 'stone', label: '🧱 Pedra' },
+              { id: 'wood', label: '🪵 Soltar Madeira' },
+              { id: 'stone', label: '🧱 Soltar Pedra' },
               { id: 'cannon', label: '🔥 Disparar' }
             ].map(tool =>
               h('button', {
