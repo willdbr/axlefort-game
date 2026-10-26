@@ -7,7 +7,7 @@ const App = () => {
       <h1>AxleFort: Tactical Siege</h1>
       <p>Build your rolling bastion. Shatter their foundation.</p>
       <div style={{ marginTop: '30px', padding: '20px', background: '#131B2E', borderRadius: '12px', display: 'inline-block' }}>
-        <p>Versão Mobile Android em compilação na nuvem (GitHub Actions).</p>
+        <p>Versão Mobile Android em compilação nuvem (GitHub Actions).</p>
       </div>
     </div>
   );
